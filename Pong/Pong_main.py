@@ -172,7 +172,7 @@ if __name__ == '__main__':
     parser.add_argument("--env", default=DEFAULT_ENV_NAME,
                         help="Name of the environment, default=" +
                              DEFAULT_ENV_NAME)
-    parser.add_arguement("--n_step", default=1, help="unrolling step in Bellman optimality eqn")
+    parser.add_argument("--n_step", default=1, type=int, help="unrolling step in Bellman optimality eqn")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -209,7 +209,7 @@ if __name__ == '__main__':
         else:
             reward = agent.play_n_step(net, epsilon=epsilon, \
                                        n_step=args.n_step, \
-                                       gamma=GAMMA, device="cpu")
+                                       gamma=GAMMA, device=device)
         if reward is not None:
             total_rewards.append(reward)
             speed = (frame_idx - ts_frame) / (time.time() - ts)
