@@ -63,7 +63,7 @@ class Agent():
         if np.random.random() < epsilon:
             action = self.env.action_space.sample()
         else:
-            state_a = np.array([self.state], copy=False) #?why list
+            state_a = np.array([self.state], copy=False) #?why list -> adding Batch dimension
             state_v = torch.tensor(state_a).to(device)
             q_vals_v = net(state_v)
             _, act_v = torch.max(q_vals_v, dim=1)
@@ -84,6 +84,46 @@ class Agent():
             self._reset()
 
         return done_reward
+
+    @torch.no_grad() # agent is not learning while playing, so disable grads
+    def play_n_step(self, net, epsilon=0.0, n_step=1, gamma=0.99, device="cpu"):
+        done_reward = None
+        n_step_reward = 0
+        for i in range(n_step):
+            # choose action based on epsilon-greedy
+            if np.random.random() < epsilon:
+                action = self.env.action_space.sample()
+            else:
+                state_a = np.array([self.state], copy=False) #?why list -> adding Batch dimension
+                state_v = torch.tensor(state_a).to(device)
+                q_vals_v = net(state_v)
+                _, act_v = torch.max(q_vals_v, dim=1)
+                action = int(act_v.item())
+
+            # cache first state, action in order to add to experience exp_buffer
+            if i==0:
+                init_state = self.state
+                init_action = action
+
+            # do step in the environment
+            new_state, reward, is_done, _ = self.env.step(action)
+            n_step_reward += gamma**(i-1) * reward # acc for n steps discounted reward
+            self.total_reward += reward # global accumulator for undiscounted reward
+            if is_done:
+                break
+            self.state = new_state
+
+        exp = Experience(init_state, init_action, n_step_reward,
+                         is_done, new_state)
+        self.exp_buffer.append(exp)
+
+        # check if episode ended, then clear reward accumulator and reset env
+        if is_done:
+            done_reward = self.total_reward
+            self._reset()
+
+        return done_reward
+
 
 def calc_loss(batch, net, tgt_net, device="cpu"):
     states, actions, rewards, dones, next_states = batch
@@ -106,11 +146,33 @@ def calc_loss(batch, net, tgt_net, device="cpu"):
 
     return nn.MSELoss()(state_action_values, expected_state_action_values)
 
+def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, device="cpu"):
+    states, actions, rewards, dones, next_states = batch
+    states_v = torch.tensor(np.array(states, copy=False)).to(device)
+    next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
+    actions_v = torch.tensor(actions).to(device)
+    rewards_v = torch.tensor(rewards).to(device)
+    done_mask = torch.BoolTensor(dones).to(device)
+    #pdb.set_trace()
+    indices = torch.arange(0,states.shape[0]).type(torch.long).to(device)
+    state_action_values = net(states_v)[indices,actions_v.type(torch.long)]
+
+    with torch.no_grad():
+        next_state_action_values = tgt_net(next_states_v).max(1)[0]
+        next_state_action_values[done_mask] = 0.0
+        next_state_action_values = next_state_action_values.detach()
+
+    expected_state_action_values = next_state_action_values * gamma**(n_steps) + \
+                                   rewards_v
+
+    return nn.MSELoss()(state_action_values, expected_state_action_values)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default=DEFAULT_ENV_NAME,
                         help="Name of the environment, default=" +
                              DEFAULT_ENV_NAME)
+    parser.add_arguement("--n_step", default=1, help="unrolling step in Bellman optimality eqn")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -142,7 +204,12 @@ if __name__ == '__main__':
                       frame_idx / EPSILON_DECAY_LAST_FRAME)
 
         # play one step
-        reward = agent.play_step(net, epsilon, device=device)
+        if args.n_step == 1:
+            reward = agent.play_step(net, epsilon, device=device)
+        else:
+            reward = agent.play_n_step(net, epsilon=epsilon, \
+                                       n_step=args.n_step, \
+                                       gamma=GAMMA, device="cpu")
         if reward is not None:
             total_rewards.append(reward)
             speed = (frame_idx - ts_frame) / (time.time() - ts)
@@ -179,7 +246,11 @@ if __name__ == '__main__':
 
         optimizer.zero_grad()
         batch = buffer.sample(BATCH_SIZE)
-        loss_t = calc_loss(batch, net, tgt_net, device=device)
+        if args.n_step == 1:
+            loss_t = calc_loss(batch, net, tgt_net, device=device)
+        else:
+            loss_t = calc_loss_n_steps(batch, net, tgt_net, gamma =GAMMA, \
+                                     n_steps=args.n_step, device=device)
         loss_t.backward()
         optimizer.step()
 
