@@ -12,7 +12,7 @@ from tensorboardX import SummaryWriter
 import pdb
 
 DEFAULT_ENV_NAME = 'PongNoFrameskip-v4'
-MEAN_REWARD_BOUND = 19.0
+MEAN_REWARD_BOUND = 17#19.0
 
 GAMMA = 0.99
 BATCH_SIZE = 32
@@ -146,7 +146,8 @@ def calc_loss(batch, net, tgt_net, device="cpu"):
 
     return nn.MSELoss()(state_action_values, expected_state_action_values)
 
-def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, device="cpu"):
+def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, \
+                      ddqn=False, device="cpu"):
     states, actions, rewards, dones, next_states = batch
     states_v = torch.tensor(np.array(states, copy=False)).to(device)
     next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
@@ -155,10 +156,15 @@ def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, device="cpu")
     done_mask = torch.BoolTensor(dones).to(device)
     #pdb.set_trace()
     indices = torch.arange(0,states.shape[0]).type(torch.long).to(device)
-    state_action_values = net(states_v)[indices,actions_v.type(torch.long)]
+    state_action_values = net(states_v)[indices, actions_v.type(torch.long)]
 
     with torch.no_grad():
-        next_state_action_values = tgt_net(next_states_v).max(1)[0]
+        if ddqn:
+            next_state_action = net(next_states_v).max(1)[0]
+            next_state_action_values = tgt_net(next_states_v)[indices, next_state_action]
+        else:
+            next_state_action_values = tgt_net(next_states_v).max(1)[0]
+
         next_state_action_values[done_mask] = 0.0
         next_state_action_values = next_state_action_values.detach()
 
@@ -173,6 +179,7 @@ if __name__ == '__main__':
                         help="Name of the environment, default=" +
                              DEFAULT_ENV_NAME)
     parser.add_argument("--n_step", default=1, type=int, help="unrolling step in Bellman optimality eqn")
+    parser.add_argument("--ddqn", default=0, help="set =1 to enable DDQN")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -250,7 +257,8 @@ if __name__ == '__main__':
             loss_t = calc_loss(batch, net, tgt_net, device=device)
         else:
             loss_t = calc_loss_n_steps(batch, net, tgt_net, gamma =GAMMA, \
-                                     n_steps=args.n_step, device=device)
+                                     n_steps=args.n_step, ddqn=args.ddqn, \
+                                     device=device)
         loss_t.backward()
         optimizer.step()
 
