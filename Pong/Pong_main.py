@@ -125,7 +125,7 @@ class Agent():
         return done_reward
 
 
-def calc_loss(batch, net, tgt_net, device="cpu"):
+def calc_loss(batch, net, tgt_net, gamma=0.99, ddqn=False, device="cpu"):
     states, actions, rewards, dones, next_states = batch
     states_v = torch.tensor(np.array(states, copy=False)).to(device)
     next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
@@ -137,11 +137,17 @@ def calc_loss(batch, net, tgt_net, device="cpu"):
     state_action_values = net(states_v)[indices,actions_v.type(torch.long)]
 
     with torch.no_grad():
-        next_state_action_values = tgt_net(next_states_v).max(1)[0]
+        if ddqn:
+            #pdb.set_trace()
+            next_state_action = net(next_states_v).max(1)[1]
+            next_state_action_values = tgt_net(next_states_v)[indices, next_state_action.type(torch.long)]
+        else:
+            next_state_action_values = tgt_net(next_states_v).max(1)[0]
+
         next_state_action_values[done_mask] = 0.0
         next_state_action_values = next_state_action_values.detach()
 
-    expected_state_action_values = next_state_action_values * GAMMA + \
+    expected_state_action_values = next_state_action_values * gamma + \
                                    rewards_v
 
     return nn.MSELoss()(state_action_values, expected_state_action_values)
@@ -255,7 +261,8 @@ if __name__ == '__main__':
         optimizer.zero_grad()
         batch = buffer.sample(BATCH_SIZE)
         if args.n_step == 1:
-            loss_t = calc_loss(batch, net, tgt_net, device=device)
+            loss_t = calc_loss(batch, net, tgt_net, gamma =GAMMA, \
+                               ddqn=args.ddqn, device=device)
         else:
             loss_t = calc_loss_n_steps(batch, net, tgt_net, gamma =GAMMA, \
                                      n_steps=args.n_step, ddqn=args.ddqn, \
