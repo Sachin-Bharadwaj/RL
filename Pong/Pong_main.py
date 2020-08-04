@@ -160,8 +160,9 @@ def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, \
 
     with torch.no_grad():
         if ddqn:
-            next_state_action = net(next_states_v).max(1)[0]
-            next_state_action_values = tgt_net(next_states_v)[indices, next_state_action]
+            #pdb.set_trace()
+            next_state_action = net(next_states_v).max(1)[1]
+            next_state_action_values = tgt_net(next_states_v)[indices, next_state_action.type(torch.long)]
         else:
             next_state_action_values = tgt_net(next_states_v).max(1)[0]
 
