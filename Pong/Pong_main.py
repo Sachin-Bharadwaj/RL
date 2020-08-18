@@ -57,10 +57,10 @@ class Agent():
         self.total_reward = 0.0
 
     @torch.no_grad() # agent is not learning while playing, so disable grads
-    def play_step(self, net, epsilon=0.0, device="cpu"):
+    def play_step(self, net, epsilon=0.0, noisy_dqn= False, device="cpu"):
         done_reward = None
         # choose action based on epsilon-greedy
-        if np.random.random() < epsilon:
+        if noisy_dqn==False and  (np.random.random() < epsilon):
             action = self.env.action_space.sample()
         else:
             state_a = np.array([self.state], copy=False) #?why list -> adding Batch dimension
@@ -86,12 +86,12 @@ class Agent():
         return done_reward
 
     @torch.no_grad() # agent is not learning while playing, so disable grads
-    def play_n_step(self, net, epsilon=0.0, n_step=1, gamma=0.99, device="cpu"):
+    def play_n_step(self, net, epsilon=0.0, n_step=1, gamma=0.99, noisy_dqn=False, device="cpu"):
         done_reward = None
         n_step_reward = 0
         for i in range(n_step):
             # choose action based on epsilon-greedy
-            if np.random.random() < epsilon:
+            if noisy_dqn==False and (np.random.random() < epsilon):
                 action = self.env.action_space.sample()
             else:
                 state_a = np.array([self.state], copy=False) #?why list -> adding Batch dimension
@@ -187,14 +187,20 @@ if __name__ == '__main__':
                              DEFAULT_ENV_NAME)
     parser.add_argument("--n_step", default=1, type=int, help="unrolling step in Bellman optimality eqn")
     parser.add_argument("--ddqn", default=0, help="set =1 to enable DDQN")
+    parser.add_argument("--noisydqn", default=0, help='set to 1 to enable Noisy DQN/DDQN')
+
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     env = wrappers.make_env(args.env)
-
-    net = dqn_model.DQN(env.observation_space.shape,
+    if args.noisydqn == False:
+        net = dqn_model.DQN(env.observation_space.shape,
                         env.action_space.n).to(device)
+    else:
+        net = dqn_model.NoisyDQN(env.observation_space.shape,
+                        env.action_space.n).to(device)
+
     tgt_net = dqn_model.DQN(env.observation_space.shape,
                             env.action_space.n).to(device)
     writer = SummaryWriter(comment="-" + args.env)
@@ -219,11 +225,13 @@ if __name__ == '__main__':
 
         # play one step
         if args.n_step == 1:
-            reward = agent.play_step(net, epsilon, device=device)
+            reward = agent.play_step(net, epsilon, noisy_dqn=args.noisydqn, \
+                                     device=device)
         else:
             reward = agent.play_n_step(net, epsilon=epsilon, \
                                        n_step=args.n_step, \
-                                       gamma=GAMMA, device=device)
+                                       gamma=GAMMA, noisy_dqn=args.noisydqn, \
+                                       device=device)
         if reward is not None:
             total_rewards.append(reward)
             speed = (frame_idx - ts_frame) / (time.time() - ts)
@@ -237,6 +245,9 @@ if __name__ == '__main__':
             writer.add_scalar("speed", speed, frame_idx)
             writer.add_scalar("reward_100", m_reward, frame_idx)
             writer.add_scalar("reward", reward, frame_idx)
+            if args.noisydqn:
+                writer.add_scalar("reward", dqn_model.NoisyDQN.noisylayer_snr(), frame_idx)
+
 
             if best_m_reward is None or best_m_reward < m_reward:
                 torch.save(net.state_dict(), args.env +
