@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import math
 
 class DQN(nn.Module):
     def __init__(self, input_shape, n_actions):
@@ -30,7 +31,7 @@ class DQN(nn.Module):
 
 class NoisyDQN(nn.Module):
     def __init__(self, input_shape, n_actions):
-        super(DQN, self).__init__()
+        super(NoisyDQN, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
             nn.ReLU(),
@@ -40,8 +41,8 @@ class NoisyDQN(nn.Module):
         )
         conv_out_size = self._get_conv_out(input_shape)
 
-        self.noisylayers = [nn.NoisyLinear(conv_out_size, 512), \
-                            nn.NoisyLinear(512, n_actions)]
+        self.noisylayers = [NoisyLinear(conv_out_size, 512), \
+                            NoisyLinear(512, n_actions)]
         self.fc = nn.Sequential(
             self.noisylayers[0],
             nn.ReLU(),
@@ -62,21 +63,20 @@ class NoisyDQN(nn.Module):
         return snr
 
 class NoisyLinear(nn.Linear):
-    def __init__(self, in_channels, out_channels, sigma_init=0.017, bias=True, *args, **kwargs):
-        super().__init__(in_channels, out_channels, bias=bias, *args, **kwargs):
-        self.in_channels = in_channels
-        sigma_mat = torch.full((out_channels, in_channels), sigma_init)
+    def __init__(self, in_features, out_features, sigma_init=0.017, bias=True, *args, **kwargs):
+        super().__init__(in_features, out_features, bias=bias, *args, **kwargs)
+        sigma_mat = torch.full((out_features, in_features), sigma_init)
         self.sigma_weight = nn.Parameter(sigma_mat)
-        z = torch.zeros(out_channels, in_channels)
+        z = torch.zeros(out_features, in_features)
         self.register_buffer("weight_noise", z) # this will be generated in fwd pass and scaled with sigma
         if bias:
-            self.sigma_bias= nn.Parameter(torch.full((out_channels,), sigma_init))
-            z = torch.zeros(out_channels)
+            self.sigma_bias= nn.Parameter(torch.full((out_features,), sigma_init))
+            z = torch.zeros(out_features)
             self.register_buffer("bias_noise", z) # this will be generated in fwd pass and scaled with sigma
         self.reset_parameters()
 
     def  reset_parameters(self):
-        std = math.sqrt(3/self.in_channels)
+        std = math.sqrt(3/self.in_features)
         self.weight.data.uniform_(-std, std)
         self.bias.data.uniform_(-std, std)
 
@@ -84,10 +84,10 @@ class NoisyLinear(nn.Linear):
         # sample the noise for weight and bias
         self.weight_noise.normal_()
         bias = self.bias
-        if bias:
+        if bias is not None:
             self.bias_noise.normal_()
             bias = bias + self.bias_noise.data * self.sigma_bias
 
         weight = self.weight + self.weight_noise.data * self.sigma_weight
 
-        return F.linear(inp, w, bias)
+        return F.linear(inp, weight, bias)

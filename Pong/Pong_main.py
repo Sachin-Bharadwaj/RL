@@ -28,6 +28,49 @@ EPSILON_DECAY_LAST_FRAME = 150_000
 Experience = collections.namedtuple('Experience', \
                          field_names=['state', 'action', 'reward', 'done', \
                                        'new_state'])
+class PrioReplayBuffer:
+    def __init__(self,  buf_size, prob_alpha=0.6):
+        self.prob_alpha = prob_alpha
+        self.capacity = buf_size
+        self.pos = 0
+        self.buffer = []
+        self.priorities = np.zeros((buf_size, ), dtype=np.float32)
+
+    def __len__(self):
+        return len(self.buffer)
+
+    def append(self, experience):
+        max_prio = self.priorities.max() if self.buffer else 1.0
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(experience)
+        else:
+            self.buffer[self.pos] = experience
+
+        self.priorities[self.pos] = max_prio
+        self.pos = (self.pos + 1) % self.capacity
+
+
+
+    def sample(self, batch_size, beta=0.4):
+        if len(self.buffer) == self.capacity:
+            prios = self.priorities
+        else:
+            prios = self.priorities[:self.pos]
+        probs = prios ** self.prob_alpha
+
+        probs /= probs.sum()
+        indices = np.random.choice(len(self.buffer), batch_size, p=probs)
+        samples = [self.buffer[idx] for idx in indices]
+        total = len(self.buffer)
+        weights = (total * probs[indices]) ** (-beta)
+        weights /= weights.max()
+        return samples, indices, np.array(weights, dtype=np.float32)
+
+    def update_priorities(self, batch_indices, batch_priorities):
+        for idx, prio in zip(batch_indices, batch_priorities):
+            self.priorities[idx] = prio
+
+
 class ExperienceBuffer():
     def __init__(self, capacity):
         self.buffer = collections.deque(maxlen=capacity)
@@ -57,7 +100,7 @@ class Agent():
         self.total_reward = 0.0
 
     @torch.no_grad() # agent is not learning while playing, so disable grads
-    def play_step(self, net, epsilon=0.0, noisy_dqn= False, device="cpu"):
+    def play_step(self, net, epsilon=0.0, noisy_dqn=False, device="cpu"):
         done_reward = None
         # choose action based on epsilon-greedy
         if noisy_dqn==False and  (np.random.random() < epsilon):
@@ -125,7 +168,9 @@ class Agent():
         return done_reward
 
 
-def calc_loss(batch, net, tgt_net, gamma=0.99, ddqn=False, device="cpu"):
+def calc_loss(batch, net, tgt_net, gamma=0.99, ddqn=False, batch_weights=None, \
+              device="cpu"):
+
     states, actions, rewards, dones, next_states = batch
     states_v = torch.tensor(np.array(states, copy=False)).to(device)
     next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
@@ -149,11 +194,20 @@ def calc_loss(batch, net, tgt_net, gamma=0.99, ddqn=False, device="cpu"):
 
     expected_state_action_values = next_state_action_values * gamma + \
                                    rewards_v
+    if batch_weights is None: # priority replay is disabled
+        loss = nn.MSELoss()(state_action_values, expected_state_action_values)
+        priority = None
+    else:
+        loss = batch_weights * (state_action_values - \
+                                  expected_state_action_values)**2
+        priority = loss + 1e-5
 
-    return nn.MSELoss()(state_action_values, expected_state_action_values)
+        loss = loss.mean()
+
+    return loss, priority
 
 def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, \
-                      ddqn=False, device="cpu"):
+                      ddqn=False, batch_weights=None, device="cpu"):
     states, actions, rewards, dones, next_states = batch
     states_v = torch.tensor(np.array(states, copy=False)).to(device)
     next_states_v = torch.tensor(np.array(next_states, copy=False)).to(device)
@@ -178,7 +232,17 @@ def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, \
     expected_state_action_values = next_state_action_values * gamma**(n_steps) + \
                                    rewards_v
 
-    return nn.MSELoss()(state_action_values, expected_state_action_values)
+    if batch_weights is None: # priority replay is disabled
+        loss = nn.MSELoss()(state_action_values, expected_state_action_values)
+        priority = None
+    else:
+        loss = batch_weights * (state_action_values - \
+                                  expected_state_action_values)**2
+        priority = loss + 1e-5
+
+        loss = loss.mean()
+
+    return loss, priority
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -188,6 +252,7 @@ if __name__ == '__main__':
     parser.add_argument("--n_step", default=1, type=int, help="unrolling step in Bellman optimality eqn")
     parser.add_argument("--ddqn", default=0, help="set =1 to enable DDQN")
     parser.add_argument("--noisydqn", default=0, help='set to 1 to enable Noisy DQN/DDQN')
+    parser.add_argument("--prioreplay", default=0, help='set to 1 to enable priority replay')
 
     args = parser.parse_args()
 
@@ -206,8 +271,14 @@ if __name__ == '__main__':
     writer = SummaryWriter(comment="-" + args.env)
     print(net)
 
-    buffer = ExperienceBuffer(REPLAY_SIZE)
-    agent = Agent(env, buffer)
+
+    if args.prioreplay:
+        buffer = PrioReplayBuffer(REPLAY_SIZE)
+        agent = Agent(env, priobuffer)
+    else:
+        buffer = ExperienceBuffer(REPLAY_SIZE)
+        agent = Agent(env, buffer)
+
     epsilon = EPSILON_START
 
     optimizer = optim.Adam(net.parameters(), lr=LEARNING_RATE)
@@ -238,15 +309,21 @@ if __name__ == '__main__':
             ts_frame = frame_idx
             ts = time.time()
             m_reward = np.mean(total_rewards[-100:])
-            print(f"frame:{frame_idx}, games:{len(total_rewards)}, \
-                  reward:{m_reward:.4f}, eps:{epsilon:.4f}, fps:{speed:.4f}")
+
 
             writer.add_scalar("epsilon", epsilon, frame_idx)
             writer.add_scalar("speed", speed, frame_idx)
             writer.add_scalar("reward_100", m_reward, frame_idx)
             writer.add_scalar("reward", reward, frame_idx)
             if args.noisydqn:
-                writer.add_scalar("reward", dqn_model.NoisyDQN.noisylayer_snr(), frame_idx)
+                for layer, snr in enumerate(net.noisylayer_snr()):
+                    writer.add_scalar(f"layer:{layer}", snr , frame_idx)
+
+                print(f"frame:{frame_idx}, games:{len(total_rewards)}, \
+                      reward:{m_reward:.4f}, fps:{speed:.4f}")
+            else:
+                print(f"frame:{frame_idx}, games:{len(total_rewards)}, \
+                      reward:{m_reward:.4f}, eps:{epsilon:.4f}, fps:{speed:.4f}")
 
 
             if best_m_reward is None or best_m_reward < m_reward:
@@ -270,15 +347,26 @@ if __name__ == '__main__':
             tgt_net.load_state_dict(net.state_dict())
 
         optimizer.zero_grad()
-        batch = buffer.sample(BATCH_SIZE)
-        if args.n_step == 1:
-            loss_t = calc_loss(batch, net, tgt_net, gamma =GAMMA, \
-                               ddqn=args.ddqn, device=device)
+
+        if args.prioreplay:
+            batch, batch_indices, batch_weights = buffer.sample(BATCH_SIZE)
         else:
-            loss_t = calc_loss_n_steps(batch, net, tgt_net, gamma =GAMMA, \
+            batch = buffer.sample(BATCH_SIZE)
+            batch_weights = None
+
+        if args.n_step == 1:
+            loss_t, priority = calc_loss(batch, net, tgt_net, gamma =GAMMA, \
+                               ddqn=args.ddqn, batch_weights=batch_weights, \
+                                device=device)
+        else:
+            loss_t, priority = calc_loss_n_steps(batch, net, tgt_net, gamma =GAMMA, \
                                      n_steps=args.n_step, ddqn=args.ddqn, \
-                                     device=device)
+                                     batch_weights=batch_weights, \
+                                      device=device)
         loss_t.backward()
         optimizer.step()
+
+        if args.prioreplay: # update priorities in buffer
+            buffer.update_priorities(batch_indices, priority.cpu().numpy())
 
     writer.close()
