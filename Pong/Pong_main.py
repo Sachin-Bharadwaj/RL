@@ -274,7 +274,7 @@ if __name__ == '__main__':
 
     if args.prioreplay:
         buffer = PrioReplayBuffer(REPLAY_SIZE)
-        agent = Agent(env, priobuffer)
+        agent = Agent(env, buffer)
     else:
         buffer = ExperienceBuffer(REPLAY_SIZE)
         agent = Agent(env, buffer)
