@@ -268,22 +268,27 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     env = wrappers.make_env(args.env)
-    if args.noisydqn == True:
+    if args.noisydqn:
+        print("Choosing Noisy DQN architecture")
         net = dqn_model.NoisyDQN(env.observation_space.shape,
                         env.action_space.n).to(device)
         tgt_net = dqn_model.NoisyDQN(env.observation_space.shape,
                                 env.action_space.n).to(device)
-    elif args.duelingdqn == True:
+    elif args.duelingdqn:
+        print("Choosing Dueling DQN architecture")
         net = dqn_model.DuelingDQN(env.observation_space.shape,
                         env.action_space.n).to(device)
         tgt_net = dqn_model.DuelingDQN(env.observation_space.shape,
                         env.action_space.n).to(device)
     else:
+        print("Choosing Vanilla DQN architecture")
         net = dqn_model.DQN(env.observation_space.shape,
                         env.action_space.n).to(device)
         tgt_net = dqn_model.DQN(env.observation_space.shape,
                                 env.action_space.n).to(device)
-
+                                
+    if args.ddqn:
+        print("Double DQN enabled")
 
     writer = SummaryWriter(comment="-" + args.env)
     print(net)
