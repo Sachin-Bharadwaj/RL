@@ -60,7 +60,11 @@ class PrioReplayBuffer:
 
         probs /= probs.sum()
         indices = np.random.choice(len(self.buffer), batch_size, p=probs)
-        samples = [self.buffer[idx] for idx in indices]
+        states, action, reward, dones, next_states = \
+                 zip(*[self.buffer[idx] for idx in indices])
+        samples  = tuple((np.array(states), np.array(action), \
+                         np.array(reward, dtype=np.float32), \
+               np.array(dones, dtype=np.uint8), np.array(next_states)))
         total = len(self.buffer)
         weights = (total * probs[indices]) ** (-beta)
         weights /= weights.max()
@@ -177,6 +181,8 @@ def calc_loss(batch, net, tgt_net, gamma=0.99, ddqn=False, batch_weights=None, \
     actions_v = torch.tensor(actions).to(device)
     rewards_v = torch.tensor(rewards).to(device)
     done_mask = torch.BoolTensor(dones).to(device)
+    if batch_weights is not None:
+        batch_weights_v = torch.tensor(batch_weights).to(device)
     #pdb.set_trace()
     indices = torch.arange(0,states.shape[0]).type(torch.long).to(device)
     state_action_values = net(states_v)[indices,actions_v.type(torch.long)]
@@ -198,7 +204,7 @@ def calc_loss(batch, net, tgt_net, gamma=0.99, ddqn=False, batch_weights=None, \
         loss = nn.MSELoss()(state_action_values, expected_state_action_values)
         priority = None
     else:
-        loss = batch_weights * (state_action_values - \
+        loss = batch_weights_v * (state_action_values - \
                                   expected_state_action_values)**2
         priority = loss + 1e-5
 
@@ -214,6 +220,8 @@ def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, \
     actions_v = torch.tensor(actions).to(device)
     rewards_v = torch.tensor(rewards).to(device)
     done_mask = torch.BoolTensor(dones).to(device)
+    if batch_weights is not None:
+        batch_weights_v = torch.tensor(batch_weights).to(device)
     #pdb.set_trace()
     indices = torch.arange(0,states.shape[0]).type(torch.long).to(device)
     state_action_values = net(states_v)[indices, actions_v.type(torch.long)]
@@ -236,7 +244,7 @@ def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, \
         loss = nn.MSELoss()(state_action_values, expected_state_action_values)
         priority = None
     else:
-        loss = batch_weights * (state_action_values - \
+        loss = batch_weights_v * (state_action_values - \
                                   expected_state_action_values)**2
         priority = loss + 1e-5
 
@@ -367,6 +375,6 @@ if __name__ == '__main__':
         optimizer.step()
 
         if args.prioreplay: # update priorities in buffer
-            buffer.update_priorities(batch_indices, priority.cpu().numpy())
+            buffer.update_priorities(batch_indices, priority.data.cpu().numpy())
 
     writer.close()
