@@ -261,21 +261,30 @@ if __name__ == '__main__':
     parser.add_argument("--ddqn", default=0, help="set =1 to enable DDQN")
     parser.add_argument("--noisydqn", default=0, help='set to 1 to enable Noisy DQN/DDQN')
     parser.add_argument("--prioreplay", default=0, help='set to 1 to enable priority replay')
+    parser.add_argument("--duelingdqn", default=0, help='set to 1 to enable priority replay')
 
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     env = wrappers.make_env(args.env)
-    if args.noisydqn == False:
-        net = dqn_model.DQN(env.observation_space.shape,
-                        env.action_space.n).to(device)
-    else:
+    if args.noisydqn == True:
         net = dqn_model.NoisyDQN(env.observation_space.shape,
                         env.action_space.n).to(device)
+        tgt_net = dqn_model.NoisyDQN(env.observation_space.shape,
+                                env.action_space.n).to(device)
+    elif args.duelingdqn == True:
+        net = dqn_model.DuelingDQN(env.observation_space.shape,
+                        env.action_space.n).to(device)
+        tgt_net = dqn_model.DuelingDQN(env.observation_space.shape,
+                        env.action_space.n).to(device)
+    else:
+        net = dqn_model.DQN(env.observation_space.shape,
+                        env.action_space.n).to(device)
+        tgt_net = dqn_model.DQN(env.observation_space.shape,
+                                env.action_space.n).to(device)
 
-    tgt_net = dqn_model.DQN(env.observation_space.shape,
-                            env.action_space.n).to(device)
+
     writer = SummaryWriter(comment="-" + args.env)
     print(net)
 
