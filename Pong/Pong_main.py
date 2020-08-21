@@ -209,6 +209,8 @@ def calc_loss(batch, net, tgt_net, gamma=0.99, ddqn=False, batch_weights=None, \
                                   expected_state_action_values)**2
         priority = loss + 1e-5
 
+        #pdb.set_trace()
+
         loss = loss.mean()
 
     return loss, priority
@@ -247,6 +249,7 @@ def calc_loss_n_steps(batch, net, tgt_net, gamma =0.99, n_steps=1, \
     else:
         loss = batch_weights_v * (state_action_values - \
                                   expected_state_action_values)**2
+
         priority = loss + 1e-5
 
         loss = loss.mean()
@@ -261,7 +264,7 @@ if __name__ == '__main__':
     parser.add_argument("--n_step", default=1, type=int, help="unrolling step in Bellman optimality eqn")
     parser.add_argument("--ddqn", default=0, help="set =1 to enable DDQN")
     parser.add_argument("--noisydqn", default=0, help='set to 1 to enable Noisy DQN/DDQN')
-    parser.add_argument("--prioreplay", default=0, help='set to 1 to enable priority replay')
+    parser.add_argument("--prioreplay", default=0, help='set to 1 to enable vanilla implementation of priority replay')
     parser.add_argument("--duelingdqn", default=0, help='set to 1 to enable priority replay')
     parser.add_argument("--BST_PER", default=0, help='set to 1 to enable Binary sum tree implementation of Experience Replay Memory')
 
@@ -297,12 +300,15 @@ if __name__ == '__main__':
 
 
     if args.prioreplay:
+        print("Vanilla implementation of Priority Replay")
         buffer = PrioReplayBuffer(REPLAY_SIZE)
         agent = Agent(env, buffer)
     elif args.BST_PER:
+        print("Binary Sum Tree implementation of Priority Replay")
         buffer = Memory(REPLAY_SIZE)
         agent = Agent(env, buffer)
     else:
+        print("No Priority Replay")
         buffer = ExperienceBuffer(REPLAY_SIZE)
         agent = Agent(env, buffer)
 
@@ -394,7 +400,8 @@ if __name__ == '__main__':
         loss_t.backward()
         optimizer.step()
 
-        if args.prioreplay: # update priorities in buffer
+        if args.prioreplay or args.BST_PER: # update priorities in buffer
+            #print("updating buffer priorities")
             buffer.update_priorities(batch_indices, priority.data.cpu().numpy())
 
     writer.close()

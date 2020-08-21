@@ -206,7 +206,7 @@ class Memory():  # stored as ( s, a, r, s_ ) in SumTree
         # Calculating the max_weight
         p_min = np.min(self.tree.tree[-self.tree.capacity:]) / self.tree.total_priority
         max_weight = (p_min * n) ** (-self.PER_b)
-        pdb.set_trace()
+        #pdb.set_trace()
 
         for i in range(n):
             """
@@ -239,7 +239,7 @@ class Memory():  # stored as ( s, a, r, s_ ) in SumTree
                          np.array(reward, dtype=np.float32), \
                np.array(dones, dtype=np.uint8), np.array(next_states)))
 
-        return samples, b_idx, b_ISWeights
+        return samples, b_idx, b_ISWeights.squeeze()
 
     """
     Update the priorities on the tree
@@ -250,6 +250,7 @@ class Memory():  # stored as ( s, a, r, s_ ) in SumTree
         ps = np.power(clipped_errors, self.PER_a)
 
         for ti, p in zip(tree_idx, ps):
+            #pdb.set_trace()
             self.tree.update(ti, p)
 
     """
