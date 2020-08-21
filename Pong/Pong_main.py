@@ -1,5 +1,6 @@
 import Gymwrappers as wrappers
 import dqn_model
+from PER import SumTree, Memory
 import argparse
 import time
 import  numpy as np
@@ -262,6 +263,7 @@ if __name__ == '__main__':
     parser.add_argument("--noisydqn", default=0, help='set to 1 to enable Noisy DQN/DDQN')
     parser.add_argument("--prioreplay", default=0, help='set to 1 to enable priority replay')
     parser.add_argument("--duelingdqn", default=0, help='set to 1 to enable priority replay')
+    parser.add_argument("--BST_PER", default=0, help='set to 1 to enable Binary sum tree implementation of Experience Replay Memory')
 
     args = parser.parse_args()
 
@@ -286,7 +288,7 @@ if __name__ == '__main__':
                         env.action_space.n).to(device)
         tgt_net = dqn_model.DQN(env.observation_space.shape,
                                 env.action_space.n).to(device)
-                                
+
     if args.ddqn:
         print("Double DQN enabled")
 
@@ -296,6 +298,9 @@ if __name__ == '__main__':
 
     if args.prioreplay:
         buffer = PrioReplayBuffer(REPLAY_SIZE)
+        agent = Agent(env, buffer)
+    elif args.BST_PER:
+        buffer = Memory(REPLAY_SIZE)
         agent = Agent(env, buffer)
     else:
         buffer = ExperienceBuffer(REPLAY_SIZE)
@@ -370,8 +375,9 @@ if __name__ == '__main__':
 
         optimizer.zero_grad()
 
-        if args.prioreplay:
+        if args.prioreplay or args.BST_PER:
             batch, batch_indices, batch_weights = buffer.sample(BATCH_SIZE)
+            #pdb.set_trace()
         else:
             batch = buffer.sample(BATCH_SIZE)
             batch_weights = None
