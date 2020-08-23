@@ -13,14 +13,14 @@ from tensorboardX import SummaryWriter
 import pdb
 
 DEFAULT_ENV_NAME = 'SuperMarioBros-v0'
-MEAN_REWARD_BOUND = 17#19.0
+MEAN_REWARD_BOUND = 1000#19.0
 
 GAMMA = 0.99
 BATCH_SIZE = 32
-REPLAY_SIZE = 10_000 # maximum size
-REPLAY_START_SIZE = 10_000 # size we wait before starting training
+REPLAY_SIZE = 5_000 # maximum size
+REPLAY_START_SIZE = 5_000 # size we wait before starting training
 LEARNING_RATE = 1e-4
-SYNC_TARGET_FRAMES = 10 #1000 # elapsed frames after which target network updated
+SYNC_TARGET_FRAMES = 100 #1000 # elapsed frames after which target network updated
 
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
@@ -127,7 +127,7 @@ class Agent():
             pdb.set_trace()
 
         self.total_reward += reward
-        print(f"total_reward:{self.total_reward}, reward:{reward}, info:{info['flag_get']}, life:{info['life']}")
+        #print(f"total_reward:{self.total_reward}, reward:{reward}, info:{info['flag_get']}, life:{info['life']}")
 
         exp = Experience(self.state, action, reward,
                          is_done, new_state)
@@ -376,21 +376,26 @@ if __name__ == '__main__':
 
             if m_reward > MEAN_REWARD_BOUND and info['flag_get']==1:
                 print("Solved in %d frames! with mean reward %0.2f" % (frame_idx,m_reward))
+                torch.save(net.state_dict(), args.env +
+                           "-best_%.0f_flag.dat" % m_reward)
                 break
 
         # if agent gets stuck in loop start new episode
-        if (frame_idx - ts_frame) > MAX_FRAME_COUNT:
-            agent._reset()
+        #if (frame_idx - ts_frame) > MAX_FRAME_COUNT:
+        #    print("resetting, max iteration reached...")
+        #    ts_frame = frame_idx
+        #    agent._reset()
 
 
         # if Experience buffer less than threshold, then skip training
         env.render()
         if len(buffer) < REPLAY_START_SIZE:
-            print(f"replay buffer filled, will start training...")
+            #print(f"replay buffer not filled, wait for training...")
             continue
 
         # Sync target network
         if frame_idx % SYNC_TARGET_FRAMES == 0:
+            print(f"syncing.. frame_idx: {frame_idx}")
             tgt_net.load_state_dict(net.state_dict())
 
         optimizer.zero_grad()
