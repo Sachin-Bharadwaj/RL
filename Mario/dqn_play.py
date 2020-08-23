@@ -9,7 +9,7 @@ import collections
 
 import pdb
 
-DEFAULT_ENV_NAME = 'PongNoFrameskip-v4'
+DEFAULT_ENV_NAME = 'SuperMarioBros-v0'
 FPS = 25
 
 if __name__ == '__main__':
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     if args.record:
         env = gym.wrappers.Monitor(env, args.record, force=True)
 
-    net = dqn_model.DQN(env.observation_space.shape,
+    net = dqn_model.DuelingDQN(env.observation_space.shape,
                         env.action_space.n)
 
     state_dict = torch.load(args.model, map_location="cpu")

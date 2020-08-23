@@ -16,17 +16,17 @@ DEFAULT_ENV_NAME = 'SuperMarioBros-v0'
 MEAN_REWARD_BOUND = 1000#19.0
 
 GAMMA = 0.99
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 REPLAY_SIZE = 5_000 # maximum size
 REPLAY_START_SIZE = 5_000 # size we wait before starting training
 LEARNING_RATE = 1e-4
-SYNC_TARGET_FRAMES = 100 #1000 # elapsed frames after which target network updated
+SYNC_TARGET_FRAMES = 500 #1000 # elapsed frames after which target network updated
 
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
 EPSILON_DECAY_LAST_FRAME = 150_000
 
-MAX_FRAME_COUNT = 2000
+#MAX_FRAME_COUNT = 2000
 
 Experience = collections.namedtuple('Experience', \
                          field_names=['state', 'action', 'reward', 'done', \
@@ -360,10 +360,12 @@ if __name__ == '__main__':
                     writer.add_scalar(f"layer:{layer}", snr , frame_idx)
 
                 print(f"frame:{frame_idx}, games:{len(total_rewards)}, \
-                      reward:{m_reward:.4f}, fps:{speed:.4f}")
+                      reward:{m_reward:.4f}, xpos:{info['x_pos']}, \
+                      fps:{speed:.4f}")
             else:
                 print(f"frame:{frame_idx}, games:{len(total_rewards)}, \
-                      reward:{m_reward:.4f}, eps:{epsilon:.4f}, fps:{speed:.4f}")
+                      reward:{m_reward:.4f}, eps:{epsilon:.4f}, \
+                      xpos:{info['x_pos']}, fps:{speed:.4f}")
 
 
             if best_m_reward is None or best_m_reward < m_reward:
