@@ -16,10 +16,10 @@ DEFAULT_ENV_NAME = 'SuperMarioBros-v0'
 
 GAMMA = 0.9
 BATCH_SIZE = 128 #64
-REPLAY_SIZE = 10_000 # maximum size
-REPLAY_START_SIZE = 50_000 # size we wait before starting training
+REPLAY_SIZE = 2_000#10_000 # maximum size
+REPLAY_START_SIZE = 2_000 #50_000 # size we wait before starting training
 LEARNING_RATE = 1e-3
-SYNC_TARGET_FRAMES = 3000 #1000 # elapsed frames after which target network updated
+SYNC_TARGET_FRAMES = 100 #3000 #1000 # elapsed frames after which target network updated
 
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
@@ -407,9 +407,9 @@ if __name__ == '__main__':
 
 
         # if Experience buffer less than threshold, then skip training
-        # env.render()
+        env.render()
         if len(buffer) < REPLAY_START_SIZE:
-            #print(f"replay buffer not filled, wait for training...")
+            print(f"replay buffer not filled, wait for training...{len(buffer)}")
             continue
 
         # Sync target network
