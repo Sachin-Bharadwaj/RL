@@ -10,29 +10,6 @@ from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
 
 import pdb
 
-class  FireResetEnv(gym.Wrapper):
-    def __init__(self, env):
-        super(FireResetEnv, self).__init__(env)
-        # env.unwrapped.get_action_meanings() --> returns a list of possible
-        # action moves e.g.
-        # ['NOOP','FIRE', 'LEFT', 'RIGHT', ...]
-        assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
-        assert len(env.unwrapped.get_action_meanings()) >=3
-
-    def step(self, action):
-        return self.env.step(action)
-
-    def reset(self):
-        # Takes care of some corner cases in envs which needs FIRE button
-        self.env.reset()
-        obs, _, done, _ = self.env.step(1)
-        if done:
-            self.env.reset()
-        obs, _, done, _ = self.env.step(2)
-        if done:
-            self.env.reset()
-        return obs
-
 class MaxAndSkipEnv(gym.Wrapper):
     def __init__(self, env=None, skip=4):
         super(MaxAndSkipEnv, self).__init__(env)
@@ -52,11 +29,6 @@ class MaxAndSkipEnv(gym.Wrapper):
         max_frame = np.max(np.stack(self._obs_buffer), axis=0)
         return max_frame, total_reward, done, info
 
-    def reset(self):
-        self._obs_buffer.clear()
-        obs = self.env.reset()
-        self._obs_buffer.append(obs)
-        return obs
 
 class ProcessFrame84(gym.ObservationWrapper):
     def __init__(self, env=None):
@@ -71,11 +43,7 @@ class ProcessFrame84(gym.ObservationWrapper):
     @staticmethod
     def process(frame):
         #pdb.set_trace()
-        if frame.size == 210 * 160 * 3:
-            img = np.reshape(frame, [210, 160, 3]).astype(np.float32)
-        elif frame.size == 250 * 160 * 3:
-            img = np.reshape(frame, [250, 160, 3]).astype(np.float32)
-        elif frame.size == 240 * 256 * 3: # for SuperMarioBros
+        if frame.size == 240 * 256 * 3: # for SuperMarioBros
             img = np.reshape(frame, [240, 256, 3]).astype(np.float32)
         else:
             assert  False, "Unknown Resolution"
@@ -83,9 +51,7 @@ class ProcessFrame84(gym.ObservationWrapper):
         # convert from 3 channel to grayscale image
         img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         # resize to 84,110 image (width, height)
-        img = cv2.resize(img, (84,110), interpolation=cv2.INTER_AREA)
-        # remove 18 pixels from top and 8 pixels from bottom
-        img = img[18:102,:]
+        img = cv2.resize(img, (84,84), interpolation=cv2.INTER_AREA)
 
         img = np.reshape(img, (84,84,1)).astype(np.uint8)
         return img
@@ -109,25 +75,6 @@ class BufferWrapper(gym.ObservationWrapper):
         self.buffer[-1] = obs
         return self.buffer
 
-# class BufferWrapper(gym.ObservationWrapper):
-    # def __init__(self, env, n_steps, dtype=np.float32):
-        # super(BufferWrapper, self).__init__(env)
-        # self.dtype = dtype
-        # old_space = env.observation_space
-        # self.observation_space = gym.spaces.Box(
-            # old_space.low.repeat(n_steps, axis=0),
-            # old_space.high.repeat(n_steps, axis=0), dtype=dtype)
-
-    # def reset(self):
-        # self.buffer = np.zeros_like(
-            # self.observation_space.low, dtype=self.dtype)
-        # return self.observation(self.env.reset())
-
-    # def observation(self, observation):
-        # self.buffer[:-1] = self.buffer[1:]
-        # self.buffer[-1] = observation
-        # return self.buffer
-
 class ImageToPyTorch(gym.ObservationWrapper):
     def __init__(self, env):
         super(ImageToPyTorch, self).__init__(env)
@@ -148,7 +95,6 @@ def make_env(env_name):
     env = gym_super_mario_bros.make(env_name)
     env = JoypadSpace(env, SIMPLE_MOVEMENT)
     env = MaxAndSkipEnv(env, skip=4)
-    #env = FireResetEnv(env)
     env = ProcessFrame84(env)
     env = ImageToPyTorch(env)
     env = BufferWrapper(env, n_steps=4)

@@ -13,20 +13,21 @@ from tensorboardX import SummaryWriter
 import pdb
 
 DEFAULT_ENV_NAME = 'SuperMarioBros-v0'
-MEAN_REWARD_BOUND = 1000#19.0
 
-GAMMA = 0.99
-BATCH_SIZE = 64
-REPLAY_SIZE = 5_000 # maximum size
-REPLAY_START_SIZE = 5_000 # size we wait before starting training
-LEARNING_RATE = 1e-4
-SYNC_TARGET_FRAMES = 500 #1000 # elapsed frames after which target network updated
+GAMMA = 0.9
+BATCH_SIZE = 128 #64
+REPLAY_SIZE = 10_000 # maximum size
+REPLAY_START_SIZE = 50_000 # size we wait before starting training
+LEARNING_RATE = 1e-3
+SYNC_TARGET_FRAMES = 3000 #1000 # elapsed frames after which target network updated
 
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
 EPSILON_DECAY_LAST_FRAME = 150_000
 
-#MAX_FRAME_COUNT = 2000
+MAX_EPISODES = 10_000 # max no. of episodes to play
+episode_counter = 0
+MAX_STEPS_PER_EPISODE = 1000 # max num of steps to play per episode
 
 Experience = collections.namedtuple('Experience', \
                          field_names=['state', 'action', 'reward', 'done', \
@@ -331,6 +332,7 @@ if __name__ == '__main__':
 
     while True:
         frame_idx += 1
+
         # decrement epsilon
         epsilon = max(EPSILON_FINAL, EPSILON_START -
                       frame_idx / EPSILON_DECAY_LAST_FRAME)
@@ -344,7 +346,15 @@ if __name__ == '__main__':
                                        n_step=args.n_step, \
                                        gamma=GAMMA, noisy_dqn=args.noisydqn, \
                                        device=device)
-        if reward is not None:
+
+        # check if max number of steps reached since last epsidode
+        if (frame_idx - ts_frame) > MAX_STEPS_PER_EPISODE: # end the episode
+             reward = agent.total_reward
+             agent._reset()
+             print("ending epsiode...")
+
+        if reward is not None: # end of an epsisode
+            episode_counter +=1
             total_rewards.append(reward)
             speed = (frame_idx - ts_frame) / (time.time() - ts)
             ts_frame = frame_idx
@@ -353,8 +363,10 @@ if __name__ == '__main__':
 
             writer.add_scalar("epsilon", epsilon, frame_idx)
             writer.add_scalar("speed", speed, frame_idx)
-            writer.add_scalar("reward_100", m_reward, frame_idx)
-            writer.add_scalar("reward", reward, frame_idx)
+            writer.add_scalar("avg_reward", m_reward, frame_idx) # mean rewards of last 100 episodes
+            writer.add_scalar("reward", reward, frame_idx) # total reward in current episode
+            writer.add_scalar("x_pos", info['x_pos'], frame_idx) # x distance travelled at end of episode
+            writer.add_scalar("get_flag", info['flag_get'], frame_idx) #binary, reached till end or not
             if args.noisydqn:
                 for layer, snr in enumerate(net.noisylayer_snr()):
                     writer.add_scalar(f"layer:{layer}", snr , frame_idx)
@@ -367,20 +379,25 @@ if __name__ == '__main__':
                       reward:{m_reward:.4f}, eps:{epsilon:.4f}, \
                       xpos:{info['x_pos']}, fps:{speed:.4f}")
 
-
+            # just save the weights at end of every episode
             if best_m_reward is None or best_m_reward < m_reward:
-                torch.save(net.state_dict(), args.env +
-                           "-best_%.0f.dat" % m_reward)
                 if best_m_reward is not None:
                     print("Best reward updated %.3f -> %.3f" % (
                         best_m_reward, m_reward))
                 best_m_reward = m_reward
 
-            if m_reward > MEAN_REWARD_BOUND and info['flag_get']==1:
-                print("Solved in %d frames! with mean reward %0.2f" % (frame_idx,m_reward))
-                torch.save(net.state_dict(), args.env +
-                           "-best_%.0f_flag.dat" % m_reward)
+            torch.save(net.state_dict(), args.env +
+                       "-ep_%.0f-reward_%.0f-x_pos_%.0f.dat" % (episode_counter,m_reward,info['x_pos']))
+
+            if info['flag_get']==1:
+                print("Solved!!!!")
+                print(f"weights saved in filename above")
                 break
+
+            if episode_counter > MAX_EPISODES:
+                print("reached max episodes for training, exiting...")
+                break
+
 
         # if agent gets stuck in loop start new episode
         #if (frame_idx - ts_frame) > MAX_FRAME_COUNT:
@@ -390,7 +407,7 @@ if __name__ == '__main__':
 
 
         # if Experience buffer less than threshold, then skip training
-        env.render()
+        # env.render()
         if len(buffer) < REPLAY_START_SIZE:
             #print(f"replay buffer not filled, wait for training...")
             continue
