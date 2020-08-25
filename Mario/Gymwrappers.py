@@ -34,7 +34,7 @@ class ProcessFrame84(gym.ObservationWrapper):
     def __init__(self, env=None):
         super(ProcessFrame84, self).__init__(env)
         self.observation_space = gym.spaces.Box(
-                                 low=0, high=255, shape=(84,84,1),
+                                 low=0, high=255, shape=(32,32,1),
                                  dtype= np.uint8)
     def observation(self, obs):
         return ProcessFrame84.process(obs)
@@ -51,9 +51,9 @@ class ProcessFrame84(gym.ObservationWrapper):
         # convert from 3 channel to grayscale image
         img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         # resize to 84,110 image (width, height)
-        img = cv2.resize(img, (84,84), interpolation=cv2.INTER_AREA)
+        img = cv2.resize(img, (32,32), interpolation=cv2.INTER_AREA)
 
-        img = np.reshape(img, (84,84,1)).astype(np.uint8)
+        img = np.reshape(img, (32,32,1)).astype(np.uint8)
         return img
 
 class BufferWrapper(gym.ObservationWrapper):

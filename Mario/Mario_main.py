@@ -15,19 +15,19 @@ import pdb
 DEFAULT_ENV_NAME = 'SuperMarioBros-v0'
 
 GAMMA = 0.9
-BATCH_SIZE = 128 #64
-REPLAY_SIZE = 2_000#10_000 # maximum size
-REPLAY_START_SIZE = 2_000 #50_000 # size we wait before starting training
-LEARNING_RATE = 1e-3
-SYNC_TARGET_FRAMES = 100 #3000 #1000 # elapsed frames after which target network updated
+BATCH_SIZE = 256 #64
+REPLAY_SIZE = 50_000 # maximum size
+REPLAY_START_SIZE = 50_000 # size we wait before starting training
+LEARNING_RATE = 5e-4
+SYNC_TARGET_FRAMES = 10000 #3000 #1000 # elapsed frames after which target network updated
 
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
-EPSILON_DECAY_LAST_FRAME = 150_000
+EPSILON_DECAY_LAST_FRAME = 300_000
 
-MAX_EPISODES = 10_000 # max no. of episodes to play
+MAX_EPISODES = 2_000 # max no. of episodes to play
 episode_counter = 0
-MAX_STEPS_PER_EPISODE = 1000 # max num of steps to play per episode
+MAX_STEPS_PER_EPISODE = 3000 # max num of steps to play per episode
 
 Experience = collections.namedtuple('Experience', \
                          field_names=['state', 'action', 'reward', 'done', \
@@ -361,15 +361,16 @@ if __name__ == '__main__':
             ts = time.time()
             m_reward = np.mean(total_rewards[-100:])
 
-            writer.add_scalar("epsilon", epsilon, frame_idx)
-            writer.add_scalar("speed", speed, frame_idx)
-            writer.add_scalar("avg_reward", m_reward, frame_idx) # mean rewards of last 100 episodes
-            writer.add_scalar("reward", reward, frame_idx) # total reward in current episode
-            writer.add_scalar("x_pos", info['x_pos'], frame_idx) # x distance travelled at end of episode
-            writer.add_scalar("get_flag", info['flag_get'], frame_idx) #binary, reached till end or not
+            writer.add_scalar("epsilon", epsilon, episode_counter)
+            writer.add_scalar("speed", speed, episode_counter)
+            writer.add_scalar("avg_reward", m_reward, episode_counter) # mean rewards of last 100 episodes
+            writer.add_scalar("reward", reward, episode_counter) # total reward in current episode
+            writer.add_scalar("x_pos", info['x_pos'], episode_counter) # x distance travelled at end of episode
+            writer.add_scalar("get_flag", info['flag_get'], episode_counter) #binary, reached till end or not
+
             if args.noisydqn:
                 for layer, snr in enumerate(net.noisylayer_snr()):
-                    writer.add_scalar(f"layer:{layer}", snr , frame_idx)
+                    writer.add_scalar(f"layer:{layer}", snr , episode_counter)
 
                 print(f"frame:{frame_idx}, games:{len(total_rewards)}, \
                       reward:{m_reward:.4f}, xpos:{info['x_pos']}, \
@@ -386,8 +387,14 @@ if __name__ == '__main__':
                         best_m_reward, m_reward))
                 best_m_reward = m_reward
 
-            torch.save(net.state_dict(), args.env +
-                       "-ep_%.0f-reward_%.0f-x_pos_%.0f.dat" % (episode_counter,m_reward,info['x_pos']))
+            if episode_counter % 50 == 0: #saving every 10 episodes
+                torch.save(net.state_dict(), args.env +
+                          "-net_ep_%.0f-reward_%.0f-x_pos_%.0f.pth" % (episode_counter,m_reward,info['x_pos']))
+
+                torch.save(optimizer.state_dict(), args.env +
+                          "-opt_ep_%.0f-reward_%.0f-x_pos_%.0f.pth" % (episode_counter,m_reward,info['x_pos']))
+
+                writer.add_histogram('hist', np.array(total_rewards), episode_counter)
 
             if info['flag_get']==1:
                 print("Solved!!!!")
@@ -407,9 +414,9 @@ if __name__ == '__main__':
 
 
         # if Experience buffer less than threshold, then skip training
-        env.render()
+        #env.render()
         if len(buffer) < REPLAY_START_SIZE:
-            print(f"replay buffer not filled, wait for training...{len(buffer)}")
+            #print(f"replay buffer not filled, wait for training...{len(buffer)}")
             continue
 
         # Sync target network

@@ -95,7 +95,7 @@ class NoisyLinear(nn.Linear):
 class DuelingDQN(nn.Module):
     def __init__(self, input_shape, n_actions):
         super(DuelingDQN, self).__init__()
-
+        '''
         self.conv = nn.Sequential(
             nn.Conv2d(input_shape[0], 32, kernel_size=7, stride=2, padding=3),
             nn.LeakyReLU(),
@@ -104,6 +104,17 @@ class DuelingDQN(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(),
+        )
+        '''
+        self.conv = nn.Sequential(
+            nn.Conv2d(input_shape[0], 32, kernel_size=5, stride=1, padding=2),
+            nn.LeakyReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(),
         )
         '''
