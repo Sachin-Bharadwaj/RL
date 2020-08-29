@@ -17,13 +17,13 @@ DEFAULT_ENV_NAME = 'SuperMarioBros-v0'
 GAMMA = 0.9
 BATCH_SIZE = 256 #64
 REPLAY_SIZE = 50_000 # maximum size
-REPLAY_START_SIZE = 50_000 # size we wait before starting training
-LEARNING_RATE = 5e-4
+REPLAY_START_SIZE = 10_000 # size we wait before starting training
+LEARNING_RATE = 1e-3
 SYNC_TARGET_FRAMES = 10000 #3000 #1000 # elapsed frames after which target network updated
 
 EPSILON_START = 1.0
 EPSILON_FINAL = 0.01
-EPSILON_DECAY_LAST_FRAME = 300_000
+EPSILON_DECAY_LAST_FRAME = 200_000
 
 MAX_EPISODES = 2_000 # max no. of episodes to play
 episode_counter = 0
